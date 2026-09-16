@@ -32,8 +32,8 @@ openai_api_key = os.getenv("UDACITY_OPENAI_API_KEY")
 
 model = OpenAIServerModel(
     model_id="gpt-4o-mini",
+    api_key="voc-153329278615876653870466aa4d89c977bb1.17260821", #os.getenv("UDACITY_OPENAI_API_KEY"),
     api_base="https://openai.vocareum.com/v1",
-    api_key=openai_api_key,
 )
 
 # Fruit database
@@ -116,17 +116,35 @@ def save_user_state(user_id: str) -> str:
 @tool
 def purchase_fruit(user_id: str, fruit_name: str, quantity: int) -> str:
     """Records a fruit purchase in the user's purchase history.
-    
+
     Args:
         user_id: The ID of the user making the purchase.
         fruit_name: The name of the fruit being purchased.
         quantity: The quantity of fruit being purchased.
-        
-    Returns:
-        A confirmation message with purchase details.
     """
-    # TODO: Implement purchase recording with timestamps and pricing
-    pass
+    if fruit_name not in fruit_data:
+        return f"Error: Fruit '{fruit_name}' does not exist in the database."
+    
+    if user_id not in user_states:
+        user_states[user_id] = {"preferences": [], "purchases": []}
+    
+    if "purchases" not in user_states[user_id]:
+        user_states[user_id]["purchases"] = []
+    
+    unit_price = fruit_data[fruit_name]["price"]
+    total_cost = unit_price * quantity
+    
+    purchase_record = {
+        "timestamp": datetime.now().isoformat(),
+        "fruit_name": fruit_name,
+        "quantity": quantity,
+        "price_per_unit": unit_price,
+        "total_cost": total_cost
+    }
+    
+    user_states[user_id]["purchases"].append(purchase_record)
+    
+    return f"Successfully purchased {quantity} of {fruit_name} for a total cost of ${total_cost:.2f}."
 
 @tool
 def get_purchase_history(user_id: str) -> List[Dict]:
@@ -158,7 +176,30 @@ def get_purchase_summary(user_id: str) -> Dict:
         and most purchased fruit.
     """
     # TODO: Implement purchase summary calculation
-    pass
+    if user_id not in user_states or not user_states[user_id]["purchases"]:
+        return {
+            "total_spent": 0.0,
+            "transaction_count": 0,
+            "most_frequent_fruit": None,
+            "most_frequent_count": 0,
+            "total_fruits_purchased": 0
+        }
+    
+    purchases = user_states[user_id]["purchases"]
+    total_spent = sum(p["total_cost"] for p in purchases)
+    transaction_count = len(purchases)
+    total_fruits_purchased = sum(p["quantity"] for p in purchases)
+    
+    fruit_counts = Counter(p["fruit_name"] for p in purchases)
+    most_frequent_fruit, most_frequent_count = fruit_counts.most_common(1)[0] if fruit_counts else (None, 0)
+    
+    return {
+        "total_spent": total_spent,
+        "transaction_count": transaction_count,
+        "most_frequent_fruit": most_frequent_fruit,
+        "most_frequent_count": most_frequent_count,
+        "total_fruits_purchased": total_fruits_purchased
+    }
 
 # Specialized agents with real responsibilities
 
@@ -189,7 +230,7 @@ class PurchaseAgent(ToolCallingAgent):
     
     def __init__(self, model: OpenAIServerModel):
         super().__init__(
-            tools=[purchase_fruit, get_purchase_history],  # TODO: Add get_purchase_summary
+            tools=[purchase_fruit, get_purchase_history, get_purchase_summary],  # TODO: Add get_purchase_summary
             model=model,
             name="purchase_agent",
             description="Handles fruit purchases, purchase history, and purchase summaries.",
@@ -256,6 +297,9 @@ class Orchestrator(ToolCallingAgent):
             elif action == "history":
                 return self.purchases.run(f"Get purchase history for user {user_id}")
             # TODO: Add support for action == "summary"
+            elif action == "summary":
+                return purchase_agent.run(f"Get purchase summary for user {user_id}")
+
             return "Invalid purchase action"
 
         super().__init__(
