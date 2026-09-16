@@ -133,17 +133,20 @@ event_system = EventSystem()
 
 class MaintenanceLog:
     def __init__(self):
-        self.log_entries: List[Dict[str,str]] = []
+        self.log_entries: List[Dict[str,Any]] = []
         self.next_id = 1
     def add_entry(self, area: str, issue: str, reported_by: str) -> int:
         entry_id = self.next_id
         self.log_entries.append({"id": entry_id, "area": area, "issue": issue, "reported_by": reported_by, "status": "reported"})
         self.next_id +=1
         return entry_id
-    def view_log(self) -> List[Dict[str,str]]:
+    def view_log(self) -> List[Dict[str,Any]]:
         return self.log_entries
 maintenance_log = MaintenanceLog()
 
+# ========================================
+# STUDENT TASK 1: Implement create_new_event tool
+# ========================================
 @tool
 def create_new_event(event_name: str, date: str, description: str) -> str:
     """
@@ -161,7 +164,16 @@ def create_new_event(event_name: str, date: str, description: str) -> str:
     if event_system.add_event(event_name,date, description):
         return f"Event '{event_name}' on {date} successfully created: {description}."
     return f"Failed to create event '{event_name}'."
+    # Steps:
+    # 1. Call event_system.add_event(event_name, date, description)
+    # 2. If successful (returns True), return a confirmation message
+    # 3. If it fails (unlikely with current implementation), return failure message
+    # Example: return f"Event '{event_name}' on {date} successfully created: {description}."
+    pass
 
+# ========================================
+# STUDENT TASK 2: Implement list_upcoming_events tool
+# ========================================
 @tool
 def list_upcoming_events() -> str:
     """
@@ -175,7 +187,15 @@ def list_upcoming_events() -> str:
     if not events:
         return "No upcoming events are currently scheduled."
     return f"Upcoming events: {json.dumps(events)}"
+    # Steps:
+    # 1. Call event_system.list_events() to get all events
+    # 2. If the list is empty, return "No upcoming events are currently scheduled."
+    # 3. Otherwise, return the events as JSON: f"Upcoming events: {json.dumps(events)}"
+    pass
 
+# ========================================
+# STUDENT TASK 3: Implement log_maintenance_request tool
+# ========================================
 @tool
 def log_maintenance_request(area: str, issue_description: str, reported_by: str) -> str:
     """
@@ -194,6 +214,9 @@ def log_maintenance_request(area: str, issue_description: str, reported_by: str)
     return f"Maintenance request logged for '{area}' (Issue: '{issue_description}', Reported by: {reported_by}). Request ID: {request_id}."
 
 
+# ========================================
+# STUDENT TASK 4: Implement view_maintenance_log tool
+# ========================================
 @tool
 def view_maintenance_log() -> str:
     """
@@ -307,8 +330,12 @@ class Orchestrator(ToolCallingAgent):
 
         self.memory.steps = []
         
-        # TODO: Learner needs to expand this prompt to handle the new diagnosis categories
-        # and guide the LLM to use the new tools for events and maintenance.
+        # ========================================
+        # STUDENT TASK 5: Expand the orchestrator prompt
+        # ========================================
+        # The prompt below handles categories 0-3 and 6
+        # You need to add handling for categories 4 and 5 in the marked section
+        
         orchestrator_prompt = f"""
         You are the main Orchestrator.
         Customer request: "{user_request}"
@@ -322,11 +349,12 @@ class Orchestrator(ToolCallingAgent):
         - For "{self.customer_support_agent.possible_categories[4]}" (Event Inquiry), use 'list_upcoming_events' or 'create_new_event' if details are provided for a new event.
         - For "{self.customer_support_agent.possible_categories[5]}" (Maintenance Request), use 'log_maintenance_request' or 'view_maintenance_log'.
         
-        If diagnosis is "{self.customer_support_agent.possible_categories[3]}" (Gear repair), respond with 'final_answer': "Regarding your gear: please bring it to the shop for assessment."
-        If diagnosis is "{self.customer_support_agent.possible_categories[6]}" (Unknown/General) or info is missing for tools, use 'final_answer' to ask for clarification or state inability to help.
+        If the diagnosis is "{self.customer_support_agent.possible_categories[3]}" (Gear repair), provide a standard helpful response using the 'final_answer' tool: "Regarding your gear concern: Please bring the item to our shop for a detailed assessment, or call us to discuss repair or replacement options."
+        If the diagnosis is "{self.customer_support_agent.possible_categories[6]}" (Unknown/General), or if necessary information for other tools is missing and you need to ask for clarification, use the 'final_answer' tool with an appropriate message like: "I'm not entirely sure how to help with that. Could you please rephrase or provide more details?"
 
-        Extract arguments for tools from "{user_request}".
-        Call tools sequentially if needed. Conclude with 'final_answer'.
+        Extract necessary arguments for any tool you call (like date, time, item, customer name, event_name, description, area, issue_description, reported_by) directly from the original user_request: "{user_request}".
+        If a tool is used, its output (your observation) will be provided to you. You might need to call tools sequentially.
+        Conclude by calling the 'final_answer' tool with your complete response to the customer.
         """
         _ = self.run(orchestrator_prompt)
         return self._get_final_answer_from_orchestrator_memory()
@@ -340,7 +368,7 @@ requests = [
     "Do you have any 'pro_model_deck' skateboards in stock?",
     "My helmet is cracked, can you fix it?",
     "What events are happening next month?",
-    "The main ramp has a loose panel, someone could get hurt!",
+    "The main ramp has a loose panel, someone could get hurt! My name is Sarah.",
     "I'd like to schedule a 'Beginner Skate Workshop' on 2024-09-15, it's for all ages.",
     "Show me the maintenance log." 
 ]
