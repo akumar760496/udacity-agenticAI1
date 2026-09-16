@@ -10,8 +10,8 @@ openai_api_key = os.getenv("UDACITY_OPENAI_API_KEY")
 
 model = OpenAIServerModel(
     model_id="gpt-4o-mini",
+    api_key="voc-153329278615876653870466aa4d89c977bb1.17260821", #os.getenv("UDACITY_OPENAI_API_KEY"),
     api_base="https://openai.vocareum.com/v1",
-    api_key=openai_api_key,
 )
 
 class BookingSystem:
@@ -158,7 +158,9 @@ def create_new_event(event_name: str, date: str, description: str) -> str:
         str: A confirmation message.
     """
     # TODO: Implement this tool using event_system.add_event
-    pass
+    if event_system.add_event(event_name,date, description):
+        return f"Event '{event_name}' on {date} successfully created: {description}."
+    return f"Failed to create event '{event_name}'."
 
 @tool
 def list_upcoming_events() -> str:
@@ -169,7 +171,10 @@ def list_upcoming_events() -> str:
         str: A string representation of the list of events, or a message if no events are scheduled.
     """
     # TODO: Implement this tool using event_system.list_events
-    pass
+    events = event_system.list_events()
+    if not events:
+        return "No upcoming events are currently scheduled."
+    return f"Upcoming events: {json.dumps(events)}"
 
 @tool
 def log_maintenance_request(area: str, issue_description: str, reported_by: str) -> str:
@@ -185,7 +190,9 @@ def log_maintenance_request(area: str, issue_description: str, reported_by: str)
         str: A confirmation message with the request ID.
     """
     # TODO: Implement this tool using maintenance_log.add_entry
-    pass
+    request_id = maintenance_log.add_entry(area, issue_description, reported_by)
+    return f"Maintenance request logged for '{area}' (Issue: '{issue_description}', Reported by: {reported_by}). Request ID: {request_id}."
+
 
 @tool
 def view_maintenance_log() -> str:
@@ -196,7 +203,11 @@ def view_maintenance_log() -> str:
         str: A string representation of the maintenance log, or a message if the log is empty.
     """
     # TODO: Implement this tool using maintenance_log.view_log
-    pass
+    log = maintenance_log.view_log()
+    if not log:
+        return "The maintenance log is currently empty."
+    return f"Maintenance Log: {json.dumps(log)}"
+
 
 @tool
 def submit_request_diagnosis(chosen_category: str, original_request_for_context: str) -> str:
@@ -302,7 +313,7 @@ class Orchestrator(ToolCallingAgent):
         You are the main Orchestrator.
         Customer request: "{user_request}"
         Diagnosis: "{diagnosis}".
-        Available tools: {json.dumps([t.name for t in self.tools])}.
+        Available tools: {json.dumps([t.name for t in self.tools.values()])}.
 
         Based on the request and diagnosis, decide which tool to use.
         - For "{self.customer_support_agent.possible_categories[0]}" (Skateboard Inquiry), use 'get_item_inventory_level' or 'sell_item_from_inventory'.

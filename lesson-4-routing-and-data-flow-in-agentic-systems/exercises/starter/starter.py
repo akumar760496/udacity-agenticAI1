@@ -11,8 +11,8 @@ openai_api_key = os.getenv("UDACITY_OPENAI_API_KEY")
 
 model = OpenAIServerModel(
     model_id="gpt-4o-mini",
+    api_key="voc-153329278615876653870466aa4d89c977bb1.17260821", #os.getenv("UDACITY_OPENAI_API_KEY"),
     api_base="https://openai.vocareum.com/v1",
-    api_key=openai_api_key,
 )
 
 class BookingManager:
@@ -89,10 +89,7 @@ class BookingManager:
 
 booking_manager = BookingManager()
 
-# TODO: Learner Task 1: Define and implement the 'analyze_request_urgency' tool
-# This tool should take the user's request string as input.
-# It should analyze the request for keywords indicating urgency.
-# It MUST return the string "urgent" if urgency is detected, or "normal" otherwise.
+# TASK 1: Implement Urgency Tool Logic
 @tool
 def analyze_request_urgency(request: str) -> str:
     """
@@ -105,7 +102,16 @@ def analyze_request_urgency(request: str) -> str:
     Returns:
         str: "urgent" if the request contains urgency indicators, "normal" otherwise.
     """
-    pass
+    urgent_keywords = [
+        'urgent', 'emergency', 'immediately', 'asap', 'right away', 'right now', 'tomorrow',
+        '紧急', '急需', '立即', '马上', '立刻', '赶快', '尽快', '迫切', '急迫'
+    ]
+    request_lower = request.lower()
+    
+    for word in urgent_keywords:
+        if word in request_lower:
+            return "urgent"
+    return "normal"
 
 
 @tool
@@ -242,20 +248,7 @@ class RequestAnalysisAgent(ToolCallingAgent):
                 break 
         return "general_inquiry"
 
-# TODO: Learner Task 2: Define and implement the UrgencyDetectorAgent class
-# - It should inherit from ToolCallingAgent.
-# - Its __init__ method should include the 'analyze_request_urgency' tool in its tool list.
-# - It should have a method, e.g., `get_llm_urgency_assessment(self, user_request: str) -> str`.
-#   This method should:
-#     - Clear its memory.
-#     - Construct a prompt for its LLM to analyze the 'user_request' for urgency
-#       (provide keywords or guidance as in previous successful traces).
-#     - Instruct the LLM to use the 'analyze_request_urgency' tool with the original request.
-#     - Instruct the LLM that its 'final_answer' should be the direct string output ("urgent" or "normal")
-#       received from the 'analyze_request_urgency' tool's observation.
-#     - Parse its memory to retrieve this "urgent" or "normal" string from the 'final_answer'
-#       (or direct observation if final_answer isn't used by the LLM for this simple case).
-#     - Return the assessment string ("urgent" or "normal", defaulting to "normal").
+# TASK 2: UrgencyDetectorAgent implementation is active and correctly routes to tool
 class UrgencyDetectorAgent(ToolCallingAgent):
     def __init__(self, model_to_use: OpenAIServerModel):
         super().__init__(
@@ -269,7 +262,7 @@ class UrgencyDetectorAgent(ToolCallingAgent):
         self.memory.steps = []
         prompt = f"""
         Analyze the following customer request for urgency: "{user_request}"
-        Keywords like 'urgent', 'emergency', 'immediately', 'asap', 'right away', 'right now',
+        Keywords like 'urgent', 'emergency', 'immediately', 'asap', 'right away', 'right now', 'tomorrow'
         '紧急', '急需', '立即', '马上', '立刻', '赶快', '尽快', '迫切', '急迫' often indicate urgency.
         
         You MUST use the 'analyze_request_urgency' tool with the original request.
@@ -291,8 +284,8 @@ class UrgencyDetectorAgent(ToolCallingAgent):
 class ChineseBankPostOfficeAgent(ToolCallingAgent): 
     def __init__(self, model_to_use: OpenAIServerModel):
         self.request_analyzer = RequestAnalysisAgent(model_to_use)
-        # TODO: Learner Task 3a: Instantiate the UrgencyDetectorAgent
-        self.urgency_detector: Optional[UrgencyDetectorAgent] = None # Placeholder
+        # TASK 3a: Instantiate the UrgencyDetectorAgent
+        self.urgency_detector = UrgencyDetectorAgent(model_to_use)
         
         super().__init__(
             tools=[
@@ -320,35 +313,26 @@ class ChineseBankPostOfficeAgent(ToolCallingAgent):
         diagnosed_service_type = self.request_analyzer.get_service_type_from_llm(request)
         print(f"LLM Diagnosed Service: '{diagnosed_service_type}' (Expected: '{expected_service_for_metric}')")
 
-        # TODO: Learner Task 3b: Call the urgency_detector's method to get urgency assessment
-        # Store the result ( "urgent" or "normal") in 'urgency_level'
-        # And set 'is_urgent_bool' based on this.
-        # Increment 'booking_manager.routing_accuracy["urgent_requests_identified_by_llm"]' if urgent.
-        urgency_level = "normal" # Placeholder
-        is_urgent_bool = False   # Placeholder
-        # Example of how it might be used:
-        # if self.urgency_detector:
-        #    urgency_level = self.urgency_detector.get_llm_urgency_assessment(request)
-        #    is_urgent_bool = urgency_level == "urgent"
-        #    if is_urgent_bool:
-        #        booking_manager.routing_accuracy["urgent_requests_identified_by_llm"] +=1
-        print(f"LLM Assessed Urgency: '{urgency_level}' (NEEDS IMPLEMENTATION BY LEARNER)")
+        # TASK 3b: Evaluate urgency via LLM agent and increment metrics
+        urgency_level = self.urgency_detector.get_llm_urgency_assessment(request)
+        is_urgent_bool = (urgency_level == "urgent")
         
-
+        if is_urgent_bool:
+            booking_manager.routing_accuracy["urgent_requests_identified_by_llm"] += 1
+            
+        print(f"LLM Assessed Urgency: '{urgency_level}'")
+        
         if diagnosed_service_type.lower() == expected_service_for_metric.lower():
             booking_manager.routing_accuracy["correct_service_type"] +=1
 
         self.memory.steps = []
         
-        # TODO: Learner Task 4: Update the orchestrator_prompt
-        # - Incorporate 'urgency_level' into the context provided to the Orchestrator's LLM.
-        # - Modify the instructions to ensure the LLM passes the 'is_urgent' boolean flag 
-        #   (derived from 'urgency_level') to the chosen 'handle_*' tool.
+        # TASK 4: Prompt updated to actively pipe the boolean `is_urgent` flag
         orchestrator_prompt = f"""
         Orchestrator:
         Customer: '{customer_name}', Request: "{request}"
         Diagnosed Service: '{diagnosed_service_type}'. 
-        {f"ASSESSED URGENCY: '{urgency_level}'." if self.urgency_detector else "Urgency detection not yet integrated."}
+        ASSESSED URGENCY: '{urgency_level}'.
 
         Task: Call the correct handler tool based on diagnosed_service_type.
         If the request was assessed as urgent (current assessment: '{urgency_level}'), you MUST pass 'is_urgent': True to the handler tool. Otherwise, pass 'is_urgent': False.
@@ -357,7 +341,7 @@ class ChineseBankPostOfficeAgent(ToolCallingAgent):
         Pass 'customer_name': '{customer_name}'.
         For 'handle_general_inquiry_request', also pass 'original_request': "{request}".
         
-        Based on '{diagnosed_service_type}', select and call the appropriate 'handle_*' tool with the correct 'is_urgent' flag.
+        Based on '{diagnosed_service_type}', select and call the appropriate 'handle_*' tool with the correct 'is_urgent' boolean flag.
         
         After the handler tool call, MUST use 'final_answer' with the EXACT observation from the handler tool.
         """
